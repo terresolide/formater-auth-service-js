@@ -6,8 +6,8 @@
  ```
 
 ## Login page
- You must create a page in the same domain as your application
- This is the redirect url configured with your identity provider
+ You must create a page in the same domain as your application.  
+ This is the **redirect** url configured with your identity provider
  ```html
    <script>
     function extractInfoFromURL (url) {
