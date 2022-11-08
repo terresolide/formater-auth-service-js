@@ -53,7 +53,7 @@
 
 ```js
  import {AuthService} from 'formater-auth-service-js'
- AuthService.SetRedirectUri('https://domain/page-login', 'https://domain/page-logout')
+ AuthService.SetRedirectUri('https://domain/page-login')
 
  let service = new AuthService('identifier', {
        'openidUrl': 'https://sso-url',
@@ -61,27 +61,50 @@
        'method': 'public'
   })
  service.add()
- service.on('authenticated', function (user, serv) {
-   // do something
- )}
 
- service.on('logout', function () {
-   // do something
- })
- 
- service.on('error', function (error) {
-  // do something
- })
 
  // to sign in / sign out
- var button = document.getElementById('#authButton')
- button.addEventListener('click', function (e) {
+ //---------------------
+ // launch sign in
+ var authButton = document.getElementById('#authButton')
+ authButton.addEventListener('click', function (e) {
      service.login()
  })
  
- 
  // to launch logout
- service.logout()
+ var outButton = document.getElementById('#outButton')
+ outButton.addEventListener('click', function (e) {
+     service.logout()
+ })
+
+ // To listen events on service
+ // ---------------------------
+  service.on('authenticated', function (user, serv) {
+   // do something
+  )}
+
+  service.on('logout', function () {
+   // do something
+  })
+ 
+  service.on('error', function (error) {
+  // do something
+  })
+
+  // To destroy the service
+  service.remove()
+  service = null
+
+```
+
+## Methods
+
+```js
+ // get the service identifier
+ let id = service.getId()
+
+ // get user email
+ let email = service.getEmail()
 
  // to get the token
  let token = service.getToken()
