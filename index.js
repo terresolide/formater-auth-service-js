@@ -1,1 +1,1 @@
-export * from './src/modules/AuthService.js'
+export * from './src/AuthService.js'
