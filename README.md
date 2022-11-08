@@ -113,7 +113,7 @@
  let user = service.getUser()
 
  // Request more info about user
- service.getUserInfo(true)
+ service.getUserInfo()
  .then(user => { })
 
  ```

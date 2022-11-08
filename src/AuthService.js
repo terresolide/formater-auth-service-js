@@ -350,7 +350,8 @@ class AuthService {
           response_type: 'code',
           client_id: this._config.clientId,
           scope: 'openid',
-          state: this._state
+          state: this._state,
+          nonce: this._nonce
       }
     var paramsStr = Object.keys(params).map(function (key) {
        return key + '=' + params[key]
@@ -511,8 +512,16 @@ class AuthService {
           }
           body = JSON.stringify(data)
           break
-        case 'backend-session':
-          credentials = ''
+        case 'backend-credentials':
+         console.log('backedn')
+         credentials = 'include'
+         body = 'code=' + code
+         body += '&clientId=' + this._config.clientId
+         body += '&redirectUri=' + encodeURIComponent(AuthService._redirectUri)
+         body += '&nonce=' + btoa(this._nonce)
+         if (this._config.sso) {
+          body += '&sso=' + this._config.sso
+         }
         break
         case 'public':
           body = 'code=' + code
