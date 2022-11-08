@@ -62,7 +62,6 @@
   })
  service.add()
 
-
  // to sign in / sign out
  //---------------------
  // launch sign in
@@ -92,6 +91,7 @@
   })
 
   // To destroy the service
+  // ----------------------
   service.remove()
   service = null
 
