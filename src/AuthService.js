@@ -10,7 +10,7 @@ class AuthService {
   * @property {string} _keycloakUrl
   * @private
   * @static
-  * @exemple "https://my-keycloak/auth/realms/test"
+  * @exemple "https://my-keycloak/auth/realms/my-realm"
   */
  static _keycloakUrl = null
   
@@ -156,11 +156,6 @@ class AuthService {
  }
  
  /**
-  * @property {boolean} _forced - check if request userInfo url or only have information from id token
-  * @private
-  */
-  _forced = false
- /**
   * @property {string} _id - Identifier of Service
   * @private
   */
@@ -206,7 +201,7 @@ class AuthService {
  * Create an authentication service
  * @param {string} id  service identifier
  * @param {object} config  service configuration
- * @param {string} config.type="keycloak" - the type of authentication service in [keycloak, external ...] {optional}
+ * @param {string} config.type="keycloak" - the type of authentication service in [keycloak, openid, external ...] {optional}
  * @param {string} config.method="public" - the auth method among ['public', 'backend-token', 'backend-session']
  * @param {string} config.keycloakUrl - keycloak service url, if different from static keycloakUrl {optional}
  * @param {string} config.authUrl - the provider auth url, optional if keycloakUrl {optional}
@@ -219,13 +214,13 @@ class AuthService {
  constructor (id, config) {
   this._id = id
   this._config = Object.assign(this._config, config) 
-  if (this._config.type === 'keycloak' && 
-     (this._config.hasOwnProperty('keycloakUrl') || AuthService._keycloakUrl)) {
+  if ((this._config.hasOwnProperty('keycloakUrl') || AuthService._keycloakUrl)) {
     var keycloakUrl = this._config.hasOwnProperty('keycloakUrl') ? this._config.keycloakUrl : AuthService._keycloakUrl
     // add slash to ended keycloakUrl if not have
     if (keycloakUrl.substr(-1) != '/') {
       keycloakUrl = keycloakUrl + '/'
     }
+    this._config.type = 'keycloak'
     // for openid can also use the well-known url to find the endpoints
     // https://my-keycloak/auth/realms/test/.well-known/openid-configuration
     this._config.authUrl = keycloakUrl + 'protocol/openid-connect/auth'
@@ -427,9 +422,10 @@ class AuthService {
  }
  /**
   * Request the endpoints url from an openId SSO
-  * @param {sting} url - the openid provider url
+  * @param {string} url - the openid provider url
   */
  _requestOpenidEndpoints (url) {
+   this._config.type = 'openid'
    if (url.substr(-1) != '/') {
       url = url + '/'
     }
@@ -562,7 +558,6 @@ class AuthService {
   })
   .then((resp) => {return (resp.json())} , (resp) => {reject(self._identity)})
   .then((json) => {
-    self._forced = true
     if (!self._identity) {
       self._identity = {}
     }
