@@ -278,24 +278,23 @@ class AuthService {
   */
  getToken () {
   return this._token
-}
+ }
+ /**
+  * Get user
+  * @returns {object}
+  */
+  getUser () {
+    return this._identity
+  }
+
  /**
   * Get user info
   * @returns {Promise} Promise object represents the user identity
   */
- getUserInfo (force) {
+ getUserInfo () {
     var self = this
     return new Promise((resolve, reject) => {
-      if (!force) {
-        if (self._identity && resolve) {
-          resolve(self._identity, self)
-        } 
-        if (!self._identity && reject) {
-          reject()
-        }
-      } else {
         return self._requestUserInfo(resolve, reject)
-      }
     })
 }
  /**
@@ -442,7 +441,7 @@ class AuthService {
        this._config.authUrl = json.authorization_endpoint
        this._config.tokenUrl = json.token_endpoint
        this._config.refreshUrl = json.token_endpoint
-       this._config.userinfoUrl = json.userinfo_enpoint
+       this._config.userinfoUrl = json.userinfo_endpoint
        this._config.logoutUrl = json.end_session_endpoint
       }
     })
@@ -548,13 +547,14 @@ class AuthService {
   */
  _requestUserInfo (resolve, reject) {
    if (!this._token) {
-     return reject()
+     return reject('NOT_AUTHENTICATED')
    }
-   if (this._forced) {
-    resolve(this._identity)
-   }
+   
    var self = this
    var url = this._config.userinfoUrl
+   if (!url) {
+     return reject('NO_USERINFO_URL') 
+   }
    return fetch(url, {
      headers: {
        'Authorization': 'Bearer ' + this._token

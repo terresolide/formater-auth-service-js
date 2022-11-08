@@ -5,6 +5,12 @@
   npm install https://github.com/terresolide/formater-auth-service-js
  ```
 
+## Login page
+ You must create a page in the same domain as your application
+ This is the redirect url configured with your identity provider
+ ```js
+ ```
+
 ## Use
 
 ```js
@@ -20,10 +26,14 @@
  service.on('authenticated', function (user, serv) {
    // do something
  )}
+
  service.on('logout', function () {
    // do something
  })
-
+ 
+ service.on('error', function (error) {
+  // do something
+ })
  // To launch sign in 
  service.login()
  
@@ -32,5 +42,12 @@
 
  // to get the token
  let token = service.getToken()
+
+ // to get user
+ let user = service.getUser()
+
+ // More info about user
+ service.getUserInfo(true)
+ .then(user => { })
 
  ```
