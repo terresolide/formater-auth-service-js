@@ -1,6 +1,6 @@
 {
   "name": "formater-auth-service-js",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Package for authentication width keycloak, openId and others",
   "repository": {
     "type": "git",

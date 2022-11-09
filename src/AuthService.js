@@ -389,8 +389,12 @@ class AuthService {
             credentials: 'omit'
         }).then((resp) => { this.logout(true)}, (resp) => {this.logout(true)})
         break
-      case 'backend-session':
-      break
+      case 'backend-credentials':
+        fetch(this._config.logoutUrl, 
+          {
+            credentials: 'include'
+        }).then((resp) => { this.logout(true)}, (resp) => {this.logout(true)})
+        break
       case 'public':
         var url = this._config.logoutUrl + '?client_id=' + this._config.clientId
         url += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUriLogout)
