@@ -244,6 +244,9 @@ class AuthService {
      this._iframe.setAttribute('src', this._getLoginUrl())
      document.body.appendChild(this._iframe)
    }
+   if (this._config.method === 'backend-credentials') {
+     this._requestRefreshToken() 
+   }
    if (this._codeListener) {
     return
   }
@@ -302,7 +305,6 @@ class AuthService {
     var loop = setInterval(function() {
       if (_this.popup.closed) {
         clearInterval(loop)
-        _this.waiting = false
         _this.popup = null
       }
     })
@@ -397,7 +399,6 @@ class AuthService {
         var loop = setInterval(function() {
           if (_this.popup.closed) {
             clearInterval(loop)
-            _this.waiting = false
             _this.popup = null
             _this.logout(true)
           }
@@ -419,7 +420,6 @@ class AuthService {
         this._iframe = null
       }
    }
-   this.waiting = false
  }
  /**
   * Request the endpoints url from an openId SSO
@@ -460,7 +460,17 @@ class AuthService {
          this._refreshToken = data.refresh_token || this._token
        })
        break
-     case 'backend-session':
+     case 'backend-credentials':
+       fetch(this._config.refreshUrl, {
+         credentials: 'include'
+       }).then((resp) => {return resp.json()}, (resp) => {this._resetUser()})
+       .then((data) => {
+         if (!data.email) {
+           this._resetUser() 
+         } else {
+           this._setUserCredentials(data)
+         }
+       })
        break
      case 'public': 
        var postdata = 'refresh_token=' + this._refreshToken
@@ -475,8 +485,12 @@ class AuthService {
           },
           credentials: 'omit',
           body: postdata
-       }).then((resp) => { return resp.json()}, (resp) => {this._resetUser()})
-       .then((data) => {
+       }).then((resp) => { 
+             this._setExpire(resp.headers.expire)
+             return resp.json()
+            }, 
+            (resp) => {this._resetUser()
+       }).then((data) => {
          this._token = data.token || data.access_token
          this._refreshToken = data.refresh_token || this._token
       })
@@ -530,11 +544,6 @@ class AuthService {
           body += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUri)
           break
       }
-      if (this._config.method === 'backend-token') {
-        
-          
-      } else if (this._config.method === 'public') {
-          }
 
       fetch(url, {
           method: 'POST',
@@ -542,8 +551,9 @@ class AuthService {
           credentials: credentials,
           body: body
       })
-      .then((resp) => { return resp.json()}, (resp) => {console.log(resp)})
-      .then((data) => { this._setToken(data)})
+      .then((resp) => {return resp.json()}, (resp) => {console.log(resp)})
+      .then((data) => {
+         this._setToken(data)})
  }
  /**
   * Request the user info
@@ -551,16 +561,21 @@ class AuthService {
   * @param {callback} reject
   */
  _requestUserInfo (resolve, reject) {
+  if (!this._config.userinfoUrl) {
+    if (reject) {
+      return reject('NO_USERINFO_URL') 
+     }
+     return
+   }
    if (!this._token) {
-     return reject('NOT_AUTHENTICATED')
+     if (reject) {
+       return reject('NOT_AUTHENTICATED')
+     }
+     return
    }
    
    var self = this
-   var url = this._config.userinfoUrl
-   if (!url) {
-     return reject('NO_USERINFO_URL') 
-   }
-   return fetch(url, {
+   return fetch(this._config.userinfoUrl, {
      headers: {
        'Authorization': 'Bearer ' + this._token
     }
@@ -589,67 +604,89 @@ class AuthService {
    if (this._callback.logout) {
     this._callback.logout()
   }
- //  this.logged = false
  }
  /**
   * Record the token and others informations contains in identity token
-  * @param {string} data - a jwt token
+  * when credentials data contains email
+  * @param {object} data - contains a jwt token, or email
   */
  _setToken (data) {
-      // console.log(data)
-      this.waiting = false
-//      if (this._timer) {
-//        clearInterval(this._timer)
-//      }
-     
-      if (data.token || data.access_token) {
-         var self = this
-         this._token = data.token || data.access_token
-        // this.logged = true
-         if (data.refresh_token) {
-            this._refreshToken = data.refresh_token
-          } else {
-            this._refreshToken = this._token
-          }
-          if (data.id_token || data.token) {
-            var obj = data.id_token ? jwt_decode(data.id_token) : jwt_decode(data.token)
-            console.log(obj)
-            this._identity = obj.data || obj ||  null
-            console.log(this._identity)
-            if  (this._callback['authenticated']) {
-              this._callback['authenticated'](this._identity, this)
-              
-            }
-          } else {
-            this._requestUserInfo(self._callback['authenticated'])
-          }
-          if (obj.exp) {
-             var now = new Date()
-            console.log(obj.exp)
-            this._expire = obj.exp * 1000 - now.getTime()
-            if (this._expire > 30 * 60 * 1000) {
-              this._expire = 30 * 60 * 1000
-            }
-          }
-          if (data.expires_in) {
-            this._expire = data.expires_in * 1000
-            
-          }
-          if (this._expire) {
-            this._timer = setInterval(function () {
-              self._requestRefreshToken()
-            }, this._expire)
-          }
-      }  else {
-        this.logout()
-      }   
-    }
-    _triggerError (name) {
-      console.log('Error: ' + name)
-      if (this._callback.error) {
-        this._callback.error(name)
+   if (data.email) {
+     this._setUserCredentials(data)
+     return 
+   }
+   if (data.token || data.access_token) {
+     var self = this
+     this._token = data.token || data.access_token
+    // this.logged = true
+     if (data.refresh_token) {
+        this._refreshToken = data.refresh_token
+      } else {
+        this._refreshToken = this._token
       }
+      if (data.id_token || data.token) {
+        var obj = data.id_token ? jwt_decode(data.id_token) : jwt_decode(data.token)
+        console.log(obj)
+        this._identity = obj.data || obj ||  null
+        console.log(this._identity)
+        if  (this._callback['authenticated']) {
+          this._callback['authenticated'](this._identity, this)
+          
+        }
+      } else {
+        this._requestUserInfo(self._callback['authenticated'])
+      }
+      if (obj.exp) {
+         var now = new Date()
+        console.log(obj.exp)
+        this._expire = obj.exp * 1000 - now.getTime()
+        if (this._expire > 30 * 60 * 1000) {
+          this._expire = 30 * 60 * 1000
+        }
+      }
+      if (data.expires_in) {
+        this._expire = data.expires_in * 1000
+        
+      }
+      if (this._expire) {
+        this._timer = setInterval(function () {
+          self._requestRefreshToken()
+        }, this._expire)
+      }
+    }  else {
+      this.logout()
+    }   
+  }
+  /**
+   * Set the identity from data for backend-credentials method
+   * @param {object} data 
+   */
+  _setUserCredentials (data) {
+    if (data.email) {
+        this._identity = data
+        this._token = true
+        if (this._config.lifetime) {
+          this._expire = this._config.lifetime * 1000
+        } else {
+          this._expire = 1200000
+        }
+        if  (!this._timer && this._callback['authenticated']) {
+          this._callback['authenticated'](this._identity, this)    
+        }
+        if (!this._timer)  {
+          var self = this
+          this._timer = setInterval(function () {
+            self._requestRefreshToken()
+          }, this._expire)
+        }
+     }
+  }
+  _triggerError (name) {
+    console.log('Error: ' + name)
+    if (this._callback.error) {
+      this._callback.error(name)
     }
+  }
 
 }
 export {AuthService}
