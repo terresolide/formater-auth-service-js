@@ -41,7 +41,46 @@ class AuthService {
     width: 850,
     height: 750
   }
-  
+ /**
+  * 
+  */
+  static loginPage () { 
+    var url = window.location.href
+    var split = url.split(/\&|\?|#/)
+    var params = []
+    var authParams = []
+    split.forEach(function(tab) {
+       var value = tab.split('=')
+       if (value.length > 1) {
+         if (['code', 'state', 'session_state', 'error'].indexOf(value[0]) >= 0) {
+           authParams[value[0]] = value[1]
+         } else {
+           params[value[0]] = value[1]
+         }
+       }
+     })
+    var location = extractInfoFromURL(window.location.href)
+    if (window.opener) {
+      // case window
+      window.opener.postMessage(
+        {
+          code:location.authParams['code'],
+          state: location.authParams['state'],
+          url: window.location.href
+        },
+        document.location.origin
+      )
+      window.close()
+    } else if (parent) {
+      // case iframe
+      parent.postMessage( {
+        code:location.authParams['code'],
+        state: location.authParams['state'],
+        url: window.location.href
+      })
+      return false
+    }
+  }
  /**
   * Set class configuration
   * @param {object} config - the global configuration
@@ -178,6 +217,11 @@ class AuthService {
   * @private
   */
  _expire = null
+ 
+ /**
+  * @property {boolean} _hasTestAuth - Use with credentials method 
+  */
+ _hasTestAuth = false
  
  /**
   * @property {intervalID} _timer - an interval identifier
@@ -490,7 +534,7 @@ class AuthService {
           credentials: 'omit',
           body: postdata
        }).then((resp) => { 
-             this._setExpire(resp.headers.expire)
+             this._expire = resp.headers.expire
              return resp.json()
             }, 
             (resp) => {this._resetUser()
@@ -555,9 +599,9 @@ class AuthService {
           credentials: credentials,
           body: body
       })
-      .then((resp) => {return resp.json()}, (resp) => {console.log(resp)})
-      .then((data) => {
-         this._setToken(data)})
+      .then((resp) => {return resp.json()})
+      .then((data) => { this._setToken(data)})
+      .catch((error) => {this._triggerError(error)})
  }
  /**
   * Request the user info
@@ -642,7 +686,6 @@ class AuthService {
       }
       if (obj.exp) {
          var now = new Date()
-        console.log(obj.exp)
         this._expire = obj.exp * 1000 - now.getTime()
         if (this._expire > 30 * 60 * 1000) {
           this._expire = 30 * 60 * 1000
