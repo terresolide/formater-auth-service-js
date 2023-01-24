@@ -632,10 +632,19 @@ class AuthService {
    }
    
    var self = this
-   return fetch(this._config.userinfoUrl, {
-     headers: {
+   var headers = {
        'Authorization': 'Bearer ' + this._token
     }
+   var credentials = 'omit'
+   if (this._config.method === 'apache') {
+     headers = {
+       'Accept': 'application/json'
+     }
+     credentials = 'include'
+   }
+   return fetch(this._config.userinfoUrl, {
+     headers: headers,
+     credentials: credentials
   })
   .then((resp) => {return (resp.json())} , (resp) => {reject(self._identity)})
   .then((json) => {
