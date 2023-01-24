@@ -246,7 +246,7 @@ class AuthService {
  * @param {string} id  service identifier
  * @param {object} config  service configuration
  * @param {string} config.type="keycloak" - the type of authentication service in [keycloak, openid, external ...] {optional}
- * @param {string} config.method="public" - the auth method among ['public', 'backend-token', 'backend-session']
+ * @param {string} config.method="public" - the auth method among ['public', 'backend-token', 'backend-session', 'apache']
  * @param {string} config.keycloakUrl - keycloak service url, if different from static keycloakUrl {optional}
  * @param {string} config.authUrl - the provider auth url, optional if keycloakUrl {optional}
  * @param {string} config.tokenUrl - the url where obtains the token, optional if keycloakUrl {optional}
@@ -390,6 +390,9 @@ class AuthService {
   * @returns {string} sso login url
   */
   _getLoginUrl () {
+    if (this._config.method === 'apache') {
+      return this._config.authUrl
+    }
    var url = this._config.authUrl + '?'
     var params = {
           redirect_uri: encodeURIComponent(AuthService._redirectUri),
@@ -461,6 +464,12 @@ class AuthService {
   * @listens message
   */
  _receiveMessage (event) {
+   if (this._config.method === 'apache' && this._config.authUrl.indexOf(event.origin) >= 0) {
+     if (event.data.email) {
+        this._setToken(event.data)
+     }
+     return
+   }
    if (event.data.code && event.data.state === this._state) {
       this._requestToken(event.data.code)
       if (this._iframe) {
