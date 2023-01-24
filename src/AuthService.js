@@ -446,14 +446,14 @@ class AuthService {
         var url = this._config.logoutUrl + '?client_id=' + this._config.clientId
         url += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUriLogout)
         this.popup = window.open(url, "_blank", "height=" + AuthService._size.height + ", width=" + AuthService._size.width + ", status=yes, toolbar=no, menubar=no, location=no,addressbar=no");
-        var _this = this
-        var loop = setInterval(function() {
-          if (_this.popup.closed) {
-            clearInterval(loop)
-            _this.popup = null
-            _this.logout(true)
-          }
-        })
+//        var _this = this
+//        var loop = setInterval(function() {
+//          if (_this.popup.closed) {
+//            clearInterval(loop)
+//            _this.popup = null
+//            _this.logout(true)
+//          }
+//        })
         break
           
     }
