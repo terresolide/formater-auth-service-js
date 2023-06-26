@@ -386,6 +386,29 @@ class AuthService {
     }
  }
  /**
+  * Test login (only backend-credentials and apache)
+  */
+  testLogin () {
+    if (this._config.method !== 'apache' && this._config.method !== 'backend-credentials') {
+      return
+    }
+    console.log('test login')
+    var headers = {
+        'Accept': 'application/json'
+      }
+    fetch(this._config.userinfoUrl, 
+          {
+            headers: headers,
+            credentials: 'include'
+        })
+         .then((resp) => {return resp.json()}, resp => {return {}})
+        .then((json) => {
+          if (json.email || json.preferred_username) {
+             this._setToken(json)
+        }})
+       
+  }
+ /**
   * Get the SSO login url with complete query
   * @returns {string} sso login url
   */
@@ -517,10 +540,16 @@ class AuthService {
          this._refreshToken = data.refresh_token || this._token
        })
        break
+    
      case 'backend-credentials':
+     case 'apache':
+       var headers = {'Accept': 'application/json'}
        fetch(this._config.refreshUrl, {
+         headers: headers,
          credentials: 'include'
-       }).then((resp) => {return resp.json()}, (resp) => {this._resetUser()})
+       })
+       .then((resp) => {return resp.json()},
+            (resp) => { return {}})
        .then((data) => {
          if (!data.email) {
            this._resetUser() 
@@ -624,7 +653,7 @@ class AuthService {
      }
      return
    }
-   if (!this._token) {
+   if (this._config.method !== 'apache' && this._config.method !== 'credentials' && !this._token) {
      if (reject) {
        return reject('NOT_AUTHENTICATED')
      }
@@ -677,6 +706,7 @@ class AuthService {
   * @param {object} data - contains a jwt token, or email
   */
  _setToken (data) {
+   console.log(data)
    if (data.email) {
      this._setUserCredentials(data)
      return 
@@ -739,6 +769,7 @@ class AuthService {
           this._callback['authenticated'](this._identity, this)    
         }
         if (!this._timer)  {
+          console.log(this._expires)
           var self = this
           this._timer = setInterval(function () {
             self._requestRefreshToken()
