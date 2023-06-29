@@ -194,6 +194,7 @@ class AuthService {
    userinfoUrl: null
  }
  
+ _cookie = null
  /**
   * @property {string} _id - Identifier of Service
   * @private
@@ -211,6 +212,8 @@ class AuthService {
   * @private
   */
  _iframe = null
+ 
+ _loginTimer = null
  
  /**
   * @property {number} _expire - Number of milliseconds before the token expires
@@ -384,18 +387,39 @@ class AuthService {
       this._iframe.remove()
       this._iframe = null
     }
+    if (this._loginTimer) {
+      clearInterval(this._loginTimer)
+    }
+    if (this._timer) {
+      clearInterval(this._timer)
+    }
  }
  /**
-  * Test login (only backend-credentials and apache)
+  * Test login (only public, backend-credentials and apache)
+  * test if user is already authenticated
+  * with public method see private _testLogin method (use cookie)
+  * with apache it's experimental
+  * with a backend-credentials: use the session cookie blindly
+  * @return  void
   */
-  testLogin () {
+  testLogin (cookie) {
+    if (this._config.method === 'public') {
+      this._testLogin()
+      var _this = this
+      this._loginTimer = setInterval(function() {
+          _this._testLogin()
+        }, 5000)
+      return
+    }
     if (this._config.method !== 'apache' && this._config.method !== 'backend-credentials') {
       return
     }
-    console.log('test login')
     var headers = {
         'Accept': 'application/json'
       }
+    if (cookie) {
+      headers['Cookie'] = cookie
+    }
     fetch(this._config.userinfoUrl, 
           {
             headers: headers,
@@ -407,6 +431,25 @@ class AuthService {
              this._setToken(json)
         }})
        
+  }
+  
+  /**
+  * Get the cookie named with the service identifier
+  * With public method, this cookie record the refreshToken
+  * @returns {string} the cookie value
+  */
+  _getCookie () {
+    if (this._config.method === 'public') {
+       console.log('test')
+       var name = this._id + "=";
+       var ca = document.cookie.split(';');
+       for(var i=0;i < ca.length;i++) {
+         var c = ca[i];
+         while (c.charAt(0)==' ') c = c.substring(1,c.length);
+         if (c.indexOf(name) == 0) return c.substring(name.length,c.length);
+    }
+    return null;
+    }
   }
  /**
   * Get the SSO login url with complete query
@@ -483,6 +526,32 @@ class AuthService {
     
  }
  /**
+  * add or delete the cookie named with the service identifier
+  * the value is the refreshToken 
+  * only for public method
+  */
+ _setCookie () {
+    if (!this._refreshToken) {
+      document.cookie = this._id + '=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/'
+    } else {
+      document.cookie = this._id + '=' + this._refreshToken + ';;path=/'
+    }
+  }
+  /**
+  * Only for public method
+  * Test if there is a cookie for the service
+  * automatically login or logout the user
+  */
+ _testLogin () {
+      var cookie = this._getCookie()
+      if (!this._identity && cookie && cookie !== 'undefined') {
+        this._refreshToken = cookie
+        this._requestRefreshToken()
+      }  else if (this._identity && !cookie ) {
+        this._resetUser()
+      }
+ }
+ /**
   * @param {window:message} event
   * @listens message
   */
@@ -544,6 +613,9 @@ class AuthService {
      case 'backend-credentials':
      case 'apache':
        var headers = {'Accept': 'application/json'}
+        if (this._cookie) {
+          headers['Cookie'] = this._cookie
+        }
        fetch(this._config.refreshUrl, {
          headers: headers,
          credentials: 'include'
@@ -559,7 +631,11 @@ class AuthService {
        })
        break
      case 'public': 
-       var postdata = 'refresh_token=' + this._refreshToken
+       var cookie = this._getCookie()
+       if (!cookie || cookie === 'undefined') {
+         this._resetUser()
+       }
+       var postdata = 'refresh_token=' + cookie
        postdata += '&grant_type=refresh_token'
        postdata += '&client_id=' + this._config.clientId
        postdata += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUri)
@@ -575,10 +651,16 @@ class AuthService {
              this._expire = resp.headers.expire
              return resp.json()
             }, 
-            (resp) => {this._resetUser()
+            (resp) => {this._resetUser(true)
        }).then((data) => {
-         this._token = data.token || data.access_token
-         this._refreshToken = data.refresh_token || this._token
+           
+           if (!this._identity) {
+               this._setToken(data)
+           } else {
+             this._token = data.token || data.access_token
+             this._refreshToken = data.refresh_token || this._token
+             this._setCookie()
+           } 
       })
       break
    }
@@ -613,7 +695,6 @@ class AuthService {
           body = JSON.stringify(data)
           break
         case 'backend-credentials':
-         console.log('backedn')
          credentials = 'include'
          body = 'code=' + code
          body += '&clientId=' + this._config.clientId
@@ -696,6 +777,7 @@ class AuthService {
    this._expire = null
    this._token = null
    this._refreshToken = null
+   this._setCookie()
    if (this._callback.logout) {
     this._callback.logout()
   }
@@ -706,25 +788,25 @@ class AuthService {
   * @param {object} data - contains a jwt token, or email
   */
  _setToken (data) {
-   console.log(data)
    if (data.email) {
+     
      this._setUserCredentials(data)
      return 
    }
+   
    if (data.token || data.access_token) {
      var self = this
      this._token = data.token || data.access_token
     // this.logged = true
      if (data.refresh_token) {
         this._refreshToken = data.refresh_token
+        this._setCookie()
       } else {
         this._refreshToken = this._token
       }
       if (data.id_token || data.token) {
         var obj = data.id_token ? jwt_decode(data.id_token) : jwt_decode(data.token)
-        console.log(obj)
         this._identity = obj.data || obj ||  null
-        console.log(this._identity)
         if  (this._callback['authenticated']) {
           this._callback['authenticated'](this._identity, this)
           
@@ -757,6 +839,9 @@ class AuthService {
    * @param {object} data 
    */
   _setUserCredentials (data) {
+    if (data.cookie) {
+        this._cookie = data.cookie
+    }
     if (data.email) {
         this._identity = data
         this._token = true
@@ -769,8 +854,13 @@ class AuthService {
           this._callback['authenticated'](this._identity, this)    
         }
         if (!this._timer)  {
-          console.log(this._expires)
           var self = this
+          if (data.cookie) {
+             setTimeout(function () {
+              self.testLogin(data.cookie)
+              }, 5000)
+          }
+          
           this._timer = setInterval(function () {
             self._requestRefreshToken()
           }, this._expire)
