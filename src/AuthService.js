@@ -534,7 +534,7 @@ class AuthService {
     if (!this._refreshToken) {
       document.cookie = this._id + '=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/'
     } else {
-      document.cookie = this._id + '=' + this._refreshToken + ';;path=/'
+      document.cookie = this._id + '=' + this._refreshToken + ';;path=/;SameSite=strict'
     }
   }
   /**
