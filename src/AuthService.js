@@ -503,6 +503,7 @@ class AuthService {
         }).then((resp) => { this.logout(true)}, (resp) => {this.logout(true)})
         break
       case 'backend-credentials':
+      case 'apache':
         fetch(this._config.logoutUrl, 
           {
             credentials: 'include'
@@ -613,9 +614,9 @@ class AuthService {
      case 'backend-credentials':
      case 'apache':
        var headers = {'Accept': 'application/json'}
-        if (this._cookie) {
-          headers['Cookie'] = this._cookie
-        }
+//        if (this._cookie) {
+//          headers['Cookie'] = this._cookie
+//        }
        fetch(this._config.refreshUrl, {
          headers: headers,
          credentials: 'include'
