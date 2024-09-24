@@ -3,7 +3,7 @@
  * @class AuthService
  */
 import jwt_decode from 'jwt-decode'
-
+import {myCrypto} from './MyCrypto.js'
 class AuthService {
  /**
   * default/global keycloak provider url (with realm)
@@ -180,6 +180,7 @@ class AuthService {
   * @property {string} _config.type='keycloak' - type of service: keycloak | external
   * @property {string} _congig.refreshUrl - endpoint to refresh the token or the session
   * @property {string} _config.userinfoUrl - endpoint to request user info
+  * @property {string} _config.redirectUri - redirectUri for the service if different from the AuthService
 
   * @private
   */
@@ -187,6 +188,7 @@ class AuthService {
    authUrl: null,
    clientId: null,
    logoutUrl: null,
+   redirectUri: null,
    method: 'public',
    tokenUrl: null,
    type: 'keycloak',
@@ -216,10 +218,16 @@ class AuthService {
  _loginTimer = null
  
  /**
-  * @property {number} _expire - Number of milliseconds before the token expires
+  * @property {number} _expire - timestamp when token expire
   * @private
   */
  _expire = null
+ 
+ /**
+  * @property {number} _refresh_expire - timestamp when refresh_token expire
+  * @private
+  */
+ _refresh_expire = null
  
  /**
   * @property {boolean} _hasTestAuth - Use with credentials method 
@@ -243,6 +251,21 @@ class AuthService {
   * @private
   */
  _token = null
+
+ /**
+  * @property {string} _codeChallenge
+  */
+ _codeChallenge = null
+
+ /**
+  * @property {string} _codeVerifier
+  */
+ _codeVerifier = null
+ 
+ /**
+  * @property {boolean} running (waiting response from identity provider)
+  */
+ running = false
 
  /**
  * Create an authentication service
@@ -279,7 +302,11 @@ class AuthService {
   } else if (config.openidUrl) {
     this._requestOpenidEndpoints(config.openidUrl)
   }
+  if (config.redirectUri) {
+    this._config.redirectUri = config.redirectUri
+  }
   this._initState(id)
+  
  }
  /**
   * Add service to the DOM
@@ -403,12 +430,12 @@ class AuthService {
   * @return  void
   */
   testLogin (cookie) {
-    if (this._config.method === 'public') {
+    if (this._config.method === 'public' || this._config.method === 'public_verifier') {
       this._testLogin()
-      var _this = this
-      this._loginTimer = setInterval(function() {
-          _this._testLogin()
-        }, 5000)
+      // var _this = this
+      // this._loginTimer = setInterval(function() {
+      //     _this._testLogin()
+      //   }, 5000)
       return
     }
     if (this._config.method !== 'apache' && this._config.method !== 'backend-credentials') {
@@ -439,8 +466,7 @@ class AuthService {
   * @returns {string} the cookie value
   */
   _getCookie () {
-    if (this._config.method === 'public') {
-       console.log('test')
+    if (this._config.method === 'public' || this._config.method === 'public_verifier') {
        var name = this._id + "=";
        var ca = document.cookie.split(';');
        for(var i=0;i < ca.length;i++) {
@@ -459,15 +485,21 @@ class AuthService {
     if (this._config.method === 'apache') {
       return this._config.authUrl
     }
-   var url = this._config.authUrl + '?'
+    var redirectUri = this._config.redirectUri || AuthService._redirectUri
+    var url = this._config.authUrl + '?'
     var params = {
-          redirect_uri: encodeURIComponent(AuthService._redirectUri),
+          redirect_uri: encodeURIComponent(redirectUri),
           response_type: 'code',
           client_id: this._config.clientId,
           scope: 'openid',
           state: this._state,
           nonce: this._nonce
       }
+    if (this._config.method === 'public_verifier') {
+      params.code_challenge = this._codeChallenge
+      params.response_mode = 'fragment'
+      params.code_challenge_method = 'S256'
+    }
     var paramsStr = Object.keys(params).map(function (key) {
        return key + '=' + params[key]
     }).join('&')
@@ -485,6 +517,14 @@ class AuthService {
       var str = id + '_' + date.getMonth() + '_' + date.getDate()
       this._nonce = btoa(str).replace(/=|\+|\//gm, '0')
       this._state = btoa('app_fmt' + id).replace(/=|\+|\//gm, '0')
+      if (this._config.method === 'public_verifier') {
+        this._codeVerifier = myCrypto.generateCodeVerifier()
+        myCrypto.generateCodeChallengeFromVerifier(this._codeVerifier)
+        .then(code => {
+           this._codeChallenge=code
+          }
+        )
+      }
  }
  /**
   * Disconnect from backend service
@@ -535,7 +575,8 @@ class AuthService {
     if (!this._refreshToken) {
       document.cookie = this._id + '=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/'
     } else {
-      document.cookie = this._id + '=' + this._refreshToken + ';;path=/;HttpOnly;SameSite=strict'
+      var domain = window.location.hostname
+      document.cookie = this._id + '=' + this._refreshToken + ';;path=/;;SameSite=strict;Domain=' + domain 
     }
   }
   /**
@@ -557,13 +598,15 @@ class AuthService {
   * @listens message
   */
  _receiveMessage (event) {
+   
    if (this._config.method === 'apache' && this._config.authUrl.indexOf(event.origin) >= 0) {
      if (event.data.email) {
         this._setToken(event.data)
      }
      return
-   }
+   } 
    if (event.data.code && event.data.state === this._state) {
+      this.running = true
       this._requestToken(event.data.code)
       if (this._iframe) {
         this._iframe.remove()
@@ -632,14 +675,18 @@ class AuthService {
        })
        break
      case 'public': 
+     case 'public_verifier':
        var cookie = this._getCookie()
        if (!cookie || cookie === 'undefined') {
          this._resetUser()
        }
+       
        var postdata = 'refresh_token=' + cookie
        postdata += '&grant_type=refresh_token'
        postdata += '&client_id=' + this._config.clientId
-       postdata += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUri)
+       if (this._config.method === 'public') {
+        postdata += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUri)
+       }
        fetch(this._config.refreshUrl, 
         {
           method: 'POST',
@@ -660,6 +707,10 @@ class AuthService {
            } else {
              this._token = data.token || data.access_token
              this._refreshToken = data.refresh_token || this._token
+             var time = Date.now() / 1000
+             this._expire_in = time + data.expires_in
+             this._refresh_expire = time + data.refresh_expires_in
+             this._expire_in = data.expires_in * 1000
              this._setCookie()
            } 
       })
@@ -706,13 +757,18 @@ class AuthService {
          }
         break
         case 'public':
+        case 'public_verifier':
+          var redirectUri = this._config.redirectUri || AuthService._redirectUri
           body = 'code=' + code
           body += '&grant_type=authorization_code'
           body += '&client_id=' + this._config.clientId
-          body += '&redirect_uri=' + encodeURIComponent(AuthService._redirectUri)
+          body += '&redirect_uri=' + encodeURIComponent(redirectUri)
+          if (this._config.method === 'public_verifier') {
+            body += '&code_verifier=' + this._codeVerifier
+          }
           break
       }
-
+      
       fetch(url, {
           method: 'POST',
           headers: headers,
@@ -720,8 +776,14 @@ class AuthService {
           body: body
       })
       .then((resp) => {return resp.json()})
-      .then((data) => { this._setToken(data)})
-      .catch((error) => {this._triggerError(error)})
+      .then((data) => { 
+        this._setToken(data)
+        this.running = false
+      })
+      .catch((error) => {
+        this._triggerError(error)
+        this.running = false
+      })
  }
  /**
   * Request the user info
@@ -776,6 +838,7 @@ class AuthService {
    this._timer = null
    this._identity = null
    this._expire = null
+   this._refresh_expire = null
    this._token = null
    this._refreshToken = null
    this._setCookie()
@@ -822,9 +885,11 @@ class AuthService {
           this._expire = 30 * 60 * 1000
         }
       }
-      if (data.expires_in) {
-        this._expire = data.expires_in * 1000
-        
+      if (data.expires_in && data.refresh_expires_in) {
+        var time = Date.now() / 1000
+        this._expire = time + data.expires_in
+        this._refresh_expire = time + data.refresh_expires_in
+        this._expire = (data.expires_in - 10) * 1000 
       }
       if (this._expire) {
         this._timer = setInterval(function () {
