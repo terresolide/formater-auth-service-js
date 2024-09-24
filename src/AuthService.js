@@ -318,6 +318,9 @@ class AuthService {
      this._iframe.setAttribute('src', this._getLoginUrl())
      document.body.appendChild(this._iframe)
    }
+   if (this._config.method === 'public' || this._config.method === 'public_verifier') {
+      this._testLogin()
+   }
    if (this._config.method === 'backend-credentials') {
      this._requestRefreshToken() 
    }
@@ -598,14 +601,16 @@ class AuthService {
   * @listens message
   */
  _receiveMessage (event) {
-   
+   console.log(event.origin)
    if (this._config.method === 'apache' && this._config.authUrl.indexOf(event.origin) >= 0) {
      if (event.data.email) {
         this._setToken(event.data)
      }
      return
    } 
-   if (event.data.code && event.data.state === this._state) {
+   var redirectUri = this._config.redirectUri || AuthService._redirectUri
+   if (event.data.code && event.data.state === this._state && redirectUri.indexOf(event.origin) === 0) {
+      console.log(event)
       this.running = true
       this._requestToken(event.data.code)
       if (this._iframe) {
