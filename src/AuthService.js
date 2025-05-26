@@ -498,7 +498,7 @@ class AuthService {
           state: this._state,
           nonce: this._nonce
       }
-    if (this._config.method === 'public_verifier') {
+    if (this._config.method === 'public_verifier' || this._config.method === 'backend-credentials') {
       params.code_challenge = this._codeChallenge
       params.response_mode = 'fragment'
       params.code_challenge_method = 'S256'
@@ -520,7 +520,7 @@ class AuthService {
       var str = id + '_' + date.getMonth() + '_' + date.getDate()
       this._nonce = btoa(str).replace(/=|\+|\//gm, '0')
       this._state = btoa('app_fmt' + id).replace(/=|\+|\//gm, '0')
-      if (this._config.method === 'public_verifier') {
+      if (this._config.method === 'public_verifier' || this._config.method === 'backend-credentials') {
         this._codeVerifier = myCrypto.generateCodeVerifier()
         myCrypto.generateCodeChallengeFromVerifier(this._codeVerifier)
         .then(code => {
@@ -757,6 +757,7 @@ class AuthService {
          body += '&clientId=' + this._config.clientId
          body += '&redirectUri=' + encodeURIComponent(AuthService._redirectUri)
          body += '&nonce=' + btoa(this._nonce)
+         body += '&codeVerifier=' + this._codeVerifier
          if (this._config.sso) {
           body += '&sso=' + this._config.sso
          }
